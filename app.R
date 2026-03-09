@@ -145,60 +145,66 @@ server <- function(input, output, session) {
 
   # 5. Next Soal Logic
   observeEvent(input$next_soal, {
-    req(input$user_ans)
-    item <- vals$current_item
-    is_correct <- if(input$user_ans == item$kunci) 1 else 0
-    
-    # Update Theta IRT 3PL Sederhana
-    exp_val <- exp(item$a * (vals$theta - item$b))
-    req(!is.na(item$a), !is.na(item$b), !is.na(item$c))
-    p_theta <- item$c + (1 - item$c) * (exp_val / (1 + exp_val))
-    vals$theta <- vals$theta + (item$a * (is_correct - p_theta) * 0.5)
-    
-    vals$answered <- c(vals$answered, item$id)
-    
-    if (length(vals$answered) >= 10) { # Target 10 soal
-      vals$selesai <- TRUE
-      shinyjs::hide("exam_area")
-      shinyjs::show("btn_kirim")
-    } else {
-       avail <- vals$item_bank[!(vals$item_bank$id %in% vals$answered), ]
-      if(nrow(avail) == 0){
-        vals$selesai <- TRUE
-        shinyjs::hide("exam_area")
-        shinyjs::show("btn_kirim")
-        return()
-      }
 
-        vals$current_item <- avail[
-          which.min(abs(as.numeric(avail$b) - vals$theta)),
-        ]
-    })
+  req(input$user_ans)
 
-  # 6. Kirim Hasil
-  observeEvent(input$btn_kirim, {
-    # Tentukan Kategori
-    cat_label <- "Cukup"
-    if(vals$theta >= 1.0) cat_label <- "Tinggi"
-    if(vals$theta <= -1.0) cat_label <- "Rendah"
-    
-    # Kirim ke Sheets
-    body <- list(nama = input$user_name, theta = round(vals$theta, 3), kategori = cat_label)
-    tryCatch({
-    POST(URL_GAS,
+  item <- vals$current_item
+  is_correct <- if(input$user_ans == item$kunci) 1 else 0
+
+  exp_val <- exp(item$a * (vals$theta - item$b))
+  p_theta <- item$c + (1 - item$c) * (exp_val / (1 + exp_val))
+
+  vals$theta <- vals$theta + (item$a * (is_correct - p_theta) * 0.5)
+
+  vals$answered <- c(vals$answered, item$id)
+
+  if (length(vals$answered) >= 10) {
+
+    vals$selesai <- TRUE
+    shinyjs::hide("exam_area")
+    shinyjs::show("btn_kirim")
+
+  } else {
+
+    avail <- vals$item_bank[!(vals$item_bank$id %in% vals$answered), ]
+
+    vals$current_item <- avail[
+      which.min(abs(as.numeric(avail$b) - vals$theta)),
+    ]
+
+  }
+
+})
+# 6. Kirim Hasil
+observeEvent(input$btn_kirim, {
+
+  cat_label <- "Cukup"
+
+  if(vals$theta >= 1.0) cat_label <- "Tinggi"
+  if(vals$theta <= -1.0) cat_label <- "Rendah"
+
+  body <- list(
+    nama = input$user_name,
+    theta = round(vals$theta,3),
+    kategori = cat_label
+  )
+
+  POST(URL_GAS,
        body = toJSON(body, auto_unbox = TRUE),
-       encode = "json",
-       timeout(10))
-    }, error=function(e){
-    showNotification("Gagal kirim hasil ke server", type="error")
-  })    
-    output$final_score <- renderText({ paste("Skor Akhir:", round(vals$theta, 3)) })
-    output$final_cat <- renderUI({ h4(paste("Kategori:", cat_label), style="color:green;") })
-    
-    shinyjs::hide("btn_kirim")
-    shinyjs::show("result_area")
-  })
-}
+       encode = "json")
 
+  output$final_score <- renderText({
+    paste("Skor Akhir:", round(vals$theta,3))
+  })
+
+  output$final_cat <- renderUI({
+    h4(paste("Kategori:", cat_label), style="color:green;")
+  })
+
+  shinyjs::hide("btn_kirim")
+  shinyjs::show("result_area")
+
+})
+}  
 # --- JALANKAN APLIKASI ---
 shinyApp(ui = ui, server = server)
