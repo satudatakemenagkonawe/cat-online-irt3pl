@@ -17,7 +17,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          Rscript -e 'install.packages(c("rsconnect", "shiny", "httr", "jsonlite", "bslib"))'
+          Rscript -e 'install.packages(c("rsconnect", "shiny", "httr", "jsonlite", "shinyjs", "bslib"))'
 
       - name: Deploy to Shinyapps.io
         run: |
