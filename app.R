@@ -37,7 +37,7 @@ server <- function(input, output, session) {
     answered = c(),
     current_item = NULL,
     selesai = FALSE,
-    total_soal_target = 10 # Tentukan target jumlah soal di sini
+    vals$total_soal_target = nrow(item_bank) # Tentukan target jumlah soal di sini
   )
 
   # --- FITUR PROGRESS BAR ---
