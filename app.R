@@ -5,7 +5,7 @@ library(bslib)
 library(shinyjs)
 
 # --- KONFIGURASI ---
-URL_GAS <- "ISI_DENGAN_URL_DEPLOYMENT_ANDA_YANG_BARU"
+URL_GAS <- "https://script.google.com/macros/s/AKfycby3mlqFtlr4O_ezpamFg6Roz4YDVMWDjOLAV3VrvJ_SK-g8mP0j7TxY6tSV_mH2Dh1-/exec"
 
 ui <- fluidPage(
   useShinyjs(),
@@ -86,16 +86,23 @@ server <- function(input, output, session) {
   # --- LOGIKA TOMBOL MULAI ---
   observeEvent(input$btn_mulai, {
     if (is.null(vals$item_bank) || nrow(vals$item_bank) == 0) {
-      showNotification("Data soal belum terload. Tunggu sebentar atau cek tab 'bank_soal'.", type = "warning")
+      showNotification("Data soal sedang diunduh, silakan tunggu 2 detik...", type = "warning")
       return()
     }
+    
+    # Konversi paksa kolom IRT ke numerik agar tidak error saat dihitung
+    vals$item_bank$a <- as.numeric(vals$item_bank$a)
+    vals$item_bank$b <- as.numeric(vals$item_bank$b)
+    vals$item_bank$c <- as.numeric(vals$item_bank$c)
     
     vals$ujian_mulai <- TRUE
     shinyjs::hide("btn_mulai")
     shinyjs::show("exam_area")
     
-    # Pilih soal pertama yang kesulitannya (b) dekat dengan 0
-    vals$current_item <- vals$item_bank[which.min(abs(as.numeric(vals$item_bank$b) - 0)), ]
+    # Cari soal pertama (paling mendekati kemampuan rata-rata b = 0)
+    # Gunakan as.numeric lagi untuk memastikan keamanan
+    idx_awal <- which.min(abs(vals$item_bank$b - 0))
+    vals$current_item <- vals$item_bank[idx_awal, ]
   })
 
   # 3. Logika Timer
