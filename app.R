@@ -60,7 +60,7 @@ ui <- fluidPage(
       ),
       br(),
       # Tombol Kirim muncul hanya jika selesai
-      hidden(actionButton("btn_kirim", "Kirim & Lihat Hasil Sertifikat", class = "btn-success btn-lg w-100"))
+      hidden(actionButton("btn_kirim", class = "btn-success btn-lg w-100"))
     )
   )
 )
