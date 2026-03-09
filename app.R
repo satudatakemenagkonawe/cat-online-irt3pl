@@ -29,6 +29,7 @@ server <- function(input, output, session) {
   # (Logika IRT 3PL Anda tetap di sini...)
   
   observeEvent(input$btn_kirim, {
+    print("Tombol ditekan!")
     # Misalkan tes sudah selesai di soal ke-5
     if (length(vals$answered) >= 5) {
       vals$selesai <- TRUE
