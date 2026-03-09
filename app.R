@@ -89,8 +89,19 @@ server <- function(input, output, session) {
         vals$current_item <- vals$item_bank[which.min(abs(vals$item_bank$b - 0)), ]
       }
     }
+    # Gunakan tryCatch agar jika gagal ambil data, aplikasi tidak langsung mati
+    tryCatch({
+      res <- GET(URL_GAS)
+      if (status_code(res) == 200) {
+        vals$item_bank <- fromJSON(content(res, "text"))
+        if (is.null(vals$current_item) && nrow(vals$item_bank) > 0) {
+          vals$current_item <- vals$item_bank[1, ]
+        }
+      }
+    }, error = function(e) {
+      showNotification("Gagal mengambil data soal. Periksa koneksi/URL GAS Anda.", type = "error")
+    })
   })
-
   # 3. Fungsi Kategori Kemampuan
   get_category <- function(theta) {
     if (theta >= 1.5) return(list(label = "SANGAT MAHIR", color = "#1b5e20"))
