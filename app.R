@@ -58,8 +58,7 @@ erver <- function(input, output, session) {
     answered = c(),
     current_item = NULL,
     selesai = FALSE,
-    # Pastikan inisialisasi awal adalah 60 menit (3600 detik)
-    time_left = 3600, 
+    time_left = 3600,      # Tetapkan 3600 detik (60 menit)
     ujian_mulai = FALSE,
     item_bank = NULL
   )
@@ -67,21 +66,18 @@ erver <- function(input, output, session) {
   observe({
     req(URL_GAS)
     tryCatch({
-      res <- GET(URL_GAS, timeout(15))
+      res <- GET(URL_GAS, timeout(10))
       if (status_code(res) == 200) {
-        # Cek apakah kontennya benar-only JSON
-        content_type <- headers(res)$`content-type`
-        if (grepl("json", content_type)) {
-          vals$item_bank <- fromJSON(content(res, "text", encoding = "UTF-8"))
-        } else {
-          showNotification("Error: Google memberikan HTML, bukan JSON. Periksa izin 'Anyone' di GAS.", type = "error", duration = NULL)
+        raw_content <- content(res, "text", encoding = "UTF-8")
+        # Validasi apakah isinya JSON, bukan HTML error
+        if (startsWith(raw_content, "[") || startsWith(raw_content, "{")) {
+          vals$item_bank <- fromJSON(raw_content)
         }
       }
     }, error = function(e) {
-      showNotification("Gagal menyambung ke database soal.", type = "error")
+      showNotification("Gagal mengambil soal. Coba refresh halaman.", type = "error")
     })
   })
-
   # --- LOGIKA TOMBOL MULAI ---
   observeEvent(input$btn_mulai, {
     if (is.null(vals$item_bank) || nrow(vals$item_bank) == 0) {
@@ -104,28 +100,31 @@ erver <- function(input, output, session) {
     vals$current_item <- vals$item_bank[idx_awal, ]
   })
 
-  # --- LOGIKA TIMER YANG DIPERBAIKI ---
+  # Logika Timer yang Diperbaiki
   observe({
     invalidateLater(1000, session)
-    # Timer HANYA berjalan jika ujian sudah dimulai dan belum selesai
-    if (vals$ujian_mulai && !vals$selesai) {
+    
+    # Timer HANYA boleh jalan jika:
+    # 1. Tombol mulai sudah diklik (ujian_mulai == TRUE)
+    # 2. Ujian belum selesai (!vals$selesai)
+    # 3. Data soal sudah berhasil diambil (!is.null(vals$item_bank))
+    
+    if (vals$ujian_mulai && !vals$selesai && !is.null(vals$item_bank)) {
       vals$time_left <- vals$time_left - 1
       
-      # Update Tampilan ke UI
+      # Update Tampilan Timer ke UI via JavaScript
       mins <- floor(vals$time_left / 60)
       secs <- vals$time_left %% 60
       runjs(sprintf("$('#timer_display').html('%02d:%02d');", mins, secs))
       
-      # Cek jika benar-benar habis
+      # Jika waktu benar-benar habis
       if (vals$time_left <= 0) {
         vals$selesai <- TRUE
-        showModal(modalDialog(title = "Waktu Habis!", "Sistem akan mengirimkan jawaban Anda secara otomatis."))
-        # Pastikan data terkirim sebelum area ujian ditutup
+        showModal(modalDialog(title = "Waktu Habis!", "Sistem mengirim jawaban otomatis."))
         click("btn_kirim") 
       }
     }
   })
-
   # 4. Render Soal
   output$soal_ui <- renderUI({
     req(vals$current_item, !vals$selesai)
@@ -181,4 +180,4 @@ erver <- function(input, output, session) {
   })
 }
 
-shinyApp(ui, server)
+shinyApp(ui = ui, server = server)
