@@ -71,7 +71,8 @@ server <- function(input, output, session) {
     tryCatch({
       res <- GET(URL_GAS, timeout(15))
       if (status_code(res) == 200) {
-        raw <- content(res, "text", encoding = "UTF-8")
+        raw <- trimws(raw)
+
         if (startsWith(raw, "[") || startsWith(raw, "{")) {
           vals$item_bank <- fromJSON(raw)
         }
@@ -100,7 +101,10 @@ server <- function(input, output, session) {
     shinyjs::show("exam_area")
     
     # Pilih soal pertama
-    vals$current_item <- vals$item_bank[which.min(abs(vals$item_bank$b - 0)), ]
+    req(nrow(vals$item_bank) > 0)
+    vals$current_item <- vals$item_bank[
+      which.min(abs(vals$item_bank$b - 0)), 
+    ]
   })
 
   # 3. Timer Logic
@@ -115,8 +119,7 @@ server <- function(input, output, session) {
       
       if (vals$time_left <= 0) {
         vals$selesai <- TRUE
-        showModal(modalDialog("Waktu Habis!", title = "Pemberitahuan"))
-        click("btn_kirim")
+        shinyjs::show("btn_kirim")
       }
     }
   })
@@ -128,11 +131,14 @@ server <- function(input, output, session) {
     tagList(
       wellPanel(
         h3(item$soal),
-        radioButtons("user_ans", "Jawaban:",
-                     choices = setNames(c("A", "B", "C", "D"), 
-                                        c(item$pilihan_a, item$pilihan_b, item$pilihan_c, item$pilihan_d)),
-                     selected = character(0))
-      ),
+        radioButtons(
+         "user_ans",
+         "Jawaban:",
+         choices = setNames(c("A","B","C","D"),
+                            c(item$pilihan_a,item$pilihan_b,item$pilihan_c,item$pilihan_d)),
+         selected = character(0)
+        )
+     ),
       actionButton("next_soal", "Simpan & Lanjut", class = "btn-info")
     )
   })
@@ -145,6 +151,7 @@ server <- function(input, output, session) {
     
     # Update Theta IRT 3PL Sederhana
     exp_val <- exp(item$a * (vals$theta - item$b))
+    req(!is.na(item$a), !is.na(item$b), !is.na(item$c))
     p_theta <- item$c + (1 - item$c) * (exp_val / (1 + exp_val))
     vals$theta <- vals$theta + (item$a * (is_correct - p_theta) * 0.5)
     
@@ -155,10 +162,18 @@ server <- function(input, output, session) {
       shinyjs::hide("exam_area")
       shinyjs::show("btn_kirim")
     } else {
-      avail <- vals$item_bank[!(vals$item_bank$id %in% vals$answered), ]
-      vals$current_item <- avail[which.min(abs(as.numeric(avail$b) - vals$theta)), ]
-    }
-  })
+       avail <- vals$item_bank[!(vals$item_bank$id %in% vals$answered), ]
+      if(nrow(avail) == 0){
+        vals$selesai <- TRUE
+        shinyjs::hide("exam_area")
+        shinyjs::show("btn_kirim")
+        return()
+      }
+
+        vals$current_item <- avail[
+          which.min(abs(as.numeric(avail$b) - vals$theta)),
+        ]
+    })
 
   # 6. Kirim Hasil
   observeEvent(input$btn_kirim, {
@@ -169,8 +184,14 @@ server <- function(input, output, session) {
     
     # Kirim ke Sheets
     body <- list(nama = input$user_name, theta = round(vals$theta, 3), kategori = cat_label)
-    POST(URL_GAS, body = toJSON(body, auto_unbox = TRUE), encode = "json")
-    
+    tryCatch({
+    POST(URL_GAS,
+       body = toJSON(body, auto_unbox = TRUE),
+       encode = "json",
+       timeout(10))
+    }, error=function(e){
+    showNotification("Gagal kirim hasil ke server", type="error")
+  })    
     output$final_score <- renderText({ paste("Skor Akhir:", round(vals$theta, 3)) })
     output$final_cat <- renderUI({ h4(paste("Kategori:", cat_label), style="color:green;") })
     
