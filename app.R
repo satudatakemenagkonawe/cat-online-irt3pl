@@ -71,10 +71,10 @@ server <- function(input, output, session) {
     tryCatch({
       res <- GET(URL_GAS, timeout(15))
       if (status_code(res) == 200) {
+        raw <- content(res, "text", encoding = "UTF-8")
         raw <- trimws(raw)
-
-        if (startsWith(raw, "[") || startsWith(raw, "{")) {
-          vals$item_bank <- fromJSON(raw)
+      if (startsWith(raw, "[") || startsWith(raw, "{")) {
+        vals$item_bank <- fromJSON(raw)
         }
       }
     }, error = function(e) {
@@ -103,7 +103,7 @@ server <- function(input, output, session) {
     # Pilih soal pertama
     req(nrow(vals$item_bank) > 0)
     vals$current_item <- vals$item_bank[
-      which.min(abs(vals$item_bank$b - 0)), 
+      which.min(abs(vals$item_bank$b - 0)) 
     ]
   })
 
@@ -169,7 +169,7 @@ server <- function(input, output, session) {
     avail <- vals$item_bank[!(vals$item_bank$id %in% vals$answered), ]
 
     vals$current_item <- avail[
-      which.min(abs(as.numeric(avail$b) - vals$theta)),
+      which.min(abs(as.numeric(avail$b) - vals$theta))
     ]
 
   }
