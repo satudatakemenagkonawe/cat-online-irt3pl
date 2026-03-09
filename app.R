@@ -6,7 +6,7 @@ library(shinyjs)
 
 # --- KONFIGURASI ---
 # Ganti dengan URL Google Apps Script (GAS) Anda yang terbaru
-URL_GAS <- "https://script.google.com/macros/s/AKfycbz1QDXTJXoEZ92ds162ySujUFI3jea3DOBs16pL9230cYvMHJo2xsZxrZjVE63Dqk0/exec"
+URL_GAS <- "https://script.google.com/macros/s/AKfycbyCOj0K26aTJ-hbraKqHOcGGUqlZryTq_v1YPnUTmXGTjEmY57XE5p1G-o2EEkRYpT8/exec"
 
 # --- UI ---
 ui <- fluidPage(
