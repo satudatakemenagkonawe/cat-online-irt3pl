@@ -30,24 +30,28 @@ server <- function(input, output, session) {
   
   observeEvent(input$btn_kirim, {
     print("Tombol ditekan!")
-    # Misalkan tes sudah selesai di soal ke-5
-    if (length(vals$answered) >= 5) {
-      vals$selesai <- TRUE
-      
-      # KIRIM DATA KE GOOGLE SHEETS VIA GAS
-      body_data <- list(
-        nama = input$user_name,
-        theta = vals$theta
-      )
-      
-      # Mengirim request POST
-      POST(url = URL_GAS, 
-           body = toJSON(body_data, auto_unbox = TRUE), 
-           encode = "json")
-      
-      showModal(modalDialog(title = "Sukses", "Data Anda telah disimpan ke Google Sheets!"))
-    }
-  })
+    
+    # Kita hapus syarat 'if length >= 5' agar bisa langsung tes kirim
+    vals$selesai <- TRUE
+
+    # Persiapkan data
+    body_data <- list(
+      nama = input$user_name,
+      theta = vals$theta
+    )
+
+    # Kirim ke Google Sheets
+    POST(url = URL_GAS, 
+         body = toJSON(body_data, auto_unbox = TRUE), 
+         encode = "json")
+
+    # Tampilkan notifikasi di layar HP/Laptop peserta
+    showModal(modalDialog(
+      title = "Sukses", 
+      "Data Anda telah disimpan ke Google Sheets!",
+      footer = modalButton("Tutup")
+    ))
+})
 }
 
 shinyApp(ui, server)
