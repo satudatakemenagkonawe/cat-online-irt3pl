@@ -59,38 +59,43 @@ server <- function(input, output, session) {
     answered = c(),
     current_item = NULL,
     selesai = FALSE,
-    time_left = 3600, # 60 menit dalam detik
-    ujian_mulai = FALSE
+    time_left = 3600,
+    ujian_mulai = FALSE,
+    item_bank = NULL
   )
 
-  # 1. Load Data Soal (Amankan dengan tryCatch)
+  # --- AMBIL DATA SOAL DENGAN PROTEKSI ---
   observe({
     req(URL_GAS)
     tryCatch({
-      res <- GET(URL_GAS)
+      res <- GET(URL_GAS, timeout(15))
       if (status_code(res) == 200) {
-        vals$item_bank <- fromJSON(content(res, "text"))
+        # Cek apakah kontennya benar-only JSON
+        content_type <- headers(res)$`content-type`
+        if (grepl("json", content_type)) {
+          vals$item_bank <- fromJSON(content(res, "text", encoding = "UTF-8"))
+        } else {
+          showNotification("Error: Google memberikan HTML, bukan JSON. Periksa izin 'Anyone' di GAS.", type = "error", duration = NULL)
+        }
       }
-    }, error = function(e) { 
-      showNotification("Gagal terhubung ke pusat data.", type = "error") 
+    }, error = function(e) {
+      showNotification("Gagal menyambung ke database soal.", type = "error")
     })
   })
 
-  # 2. Tombol Mulai & Cek Status (Anti-Refresh Sederhana)
+  # --- LOGIKA TOMBOL MULAI ---
   observeEvent(input$btn_mulai, {
-    req(input$user_name)
-    # Di sini Anda bisa menambahkan logika pengecekan ke Database Google Sheet
-    # Untuk memastikan Nama tersebut belum pernah 'Selesai'
+    if (is.null(vals$item_bank) || nrow(vals$item_bank) == 0) {
+      showNotification("Data soal belum terload. Tunggu sebentar atau cek tab 'bank_soal'.", type = "warning")
+      return()
+    }
     
     vals$ujian_mulai <- TRUE
-    shinyjs::disable("user_name")
     shinyjs::hide("btn_mulai")
     shinyjs::show("exam_area")
     
-    # Pilih soal pertama
-    if (is.null(vals$current_item)) {
-      vals$current_item <- vals$item_bank[which.min(abs(vals$item_bank$b - 0)), ]
-    }
+    # Pilih soal pertama yang kesulitannya (b) dekat dengan 0
+    vals$current_item <- vals$item_bank[which.min(abs(as.numeric(vals$item_bank$b) - 0)), ]
   })
 
   # 3. Logika Timer
