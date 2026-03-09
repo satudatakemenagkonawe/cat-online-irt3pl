@@ -5,18 +5,18 @@ library(bslib)
 library(shinyjs)
 
 # --- KONFIGURASI ---
+# Ganti dengan URL GAS /exec terbaru Anda
 URL_GAS <- "https://script.google.com/macros/s/AKfycby3mlqFtlr4O_ezpamFg6Roz4YDVMWDjOLAV3VrvJ_SK-g8mP0j7TxY6tSV_mH2Dh1-/exec"
 
+# --- UI ---
 ui <- fluidPage(
   useShinyjs(),
   theme = bslib::bs_theme(bootswatch = "flatly"),
   
-  # JavaScript untuk Timer dan Mencegah Refresh
   tags$head(
     tags$script(HTML("
-      // Mencegah penutupan tab secara tidak sengaja
       window.onbeforeunload = function() {
-        return 'Tes sedang berlangsung, Anda yakin ingin meninggalkan halaman?';
+        return 'Tes sedang berlangsung, jangan refresh halaman!';
       };
     "))
   ),
@@ -30,101 +30,97 @@ ui <- fluidPage(
       textInput("user_name", "Nama Lengkap:", ""),
       actionButton("btn_mulai", "Mulai Ujian", class = "btn-primary w-100"),
       hr(),
-      # Tampilan Timer
       wellPanel(
         h5("Sisa Waktu:"),
         div(id = "timer_display", style = "font-size: 30px; font-weight: bold; color: red;", "60:00")
-      ),
-      uiOutput("progress_bar_ui")
+      )
     ),
     
     mainPanel(
       hidden(div(id = "exam_area", uiOutput("soal_ui"))),
       hidden(div(id = "result_area", 
-                 div(style="text-align:center; padding:50px; border:2px solid #ddd;",
+                 div(style="text-align:center; padding:50px; border:2px solid #ddd; border-radius:15px;",
                      h2("TES SELESAI"),
+                     hr(),
                      h3(textOutput("final_score")),
-                     p("Data Anda telah tersimpan. Anda tidak dapat mengulang tes ini.")
+                     h4(uiOutput("final_cat")),
+                     p("Data telah tersimpan secara otomatis.")
                  )
       )),
-      hidden(actionButton("btn_kirim", "Kirim Hasil Akhir", class = "btn-success btn-lg w-100"))
+      hidden(actionButton("btn_kirim", "Lihat Hasil Akhir", class = "btn-success btn-lg w-100"))
     )
   )
 )
 
-erver <- function(input, output, session) {
+# --- SERVER ---
+server <- function(input, output, session) {
+  
   vals <- reactiveValues(
     theta = 0,
     answered = c(),
     current_item = NULL,
     selesai = FALSE,
-    time_left = 3600,      # Tetapkan 3600 detik (60 menit)
+    time_left = 3600,
     ujian_mulai = FALSE,
     item_bank = NULL
   )
-  # --- AMBIL DATA SOAL DENGAN PROTEKSI ---
+
+  # 1. Ambil Data Soal
   observe({
     req(URL_GAS)
     tryCatch({
-      res <- GET(URL_GAS, timeout(10))
+      res <- GET(URL_GAS, timeout(15))
       if (status_code(res) == 200) {
-        raw_content <- content(res, "text", encoding = "UTF-8")
-        # Validasi apakah isinya JSON, bukan HTML error
-        if (startsWith(raw_content, "[") || startsWith(raw_content, "{")) {
-          vals$item_bank <- fromJSON(raw_content)
+        raw <- content(res, "text", encoding = "UTF-8")
+        if (startsWith(raw, "[") || startsWith(raw, "{")) {
+          vals$item_bank <- fromJSON(raw)
         }
       }
     }, error = function(e) {
-      showNotification("Gagal mengambil soal. Coba refresh halaman.", type = "error")
+      showNotification("Koneksi ke bank soal bermasalah.", type = "error")
     })
   })
-  # --- LOGIKA TOMBOL MULAI ---
+
+  # 2. Tombol Mulai
   observeEvent(input$btn_mulai, {
-    if (is.null(vals$item_bank) || nrow(vals$item_bank) == 0) {
-      showNotification("Data soal sedang diunduh, silakan tunggu 2 detik...", type = "warning")
+    req(input$user_name != "")
+    if (is.null(vals$item_bank)) {
+      showNotification("Menunggu data soal...", type = "warning")
       return()
     }
     
-    # Konversi paksa kolom IRT ke numerik agar tidak error saat dihitung
+    # Pastikan data numerik
     vals$item_bank$a <- as.numeric(vals$item_bank$a)
     vals$item_bank$b <- as.numeric(vals$item_bank$b)
     vals$item_bank$c <- as.numeric(vals$item_bank$c)
     
     vals$ujian_mulai <- TRUE
     shinyjs::hide("btn_mulai")
+    shinyjs::disable("user_name")
     shinyjs::show("exam_area")
     
-    # Cari soal pertama (paling mendekati kemampuan rata-rata b = 0)
-    # Gunakan as.numeric lagi untuk memastikan keamanan
-    idx_awal <- which.min(abs(vals$item_bank$b - 0))
-    vals$current_item <- vals$item_bank[idx_awal, ]
+    # Pilih soal pertama
+    vals$current_item <- vals$item_bank[which.min(abs(vals$item_bank$b - 0)), ]
   })
 
-  # Logika Timer yang Diperbaiki
+  # 3. Timer Logic
   observe({
     invalidateLater(1000, session)
-    
-    # Timer HANYA boleh jalan jika:
-    # 1. Tombol mulai sudah diklik (ujian_mulai == TRUE)
-    # 2. Ujian belum selesai (!vals$selesai)
-    # 3. Data soal sudah berhasil diambil (!is.null(vals$item_bank))
-    
-    if (vals$ujian_mulai && !vals$selesai && !is.null(vals$item_bank)) {
+    if (vals$ujian_mulai && !vals$selesai) {
       vals$time_left <- vals$time_left - 1
       
-      # Update Tampilan Timer ke UI via JavaScript
       mins <- floor(vals$time_left / 60)
       secs <- vals$time_left %% 60
       runjs(sprintf("$('#timer_display').html('%02d:%02d');", mins, secs))
       
-      # Jika waktu benar-benar habis
       if (vals$time_left <= 0) {
         vals$selesai <- TRUE
-        showModal(modalDialog(title = "Waktu Habis!", "Sistem mengirim jawaban otomatis."))
-        click("btn_kirim") 
+        showModal(modalDialog("Waktu Habis!", title = "Pemberitahuan"))
+        click("btn_kirim")
       }
     }
   })
+
   # 4. Render Soal
   output$soal_ui <- renderUI({
     req(vals$current_item, !vals$selesai)
@@ -132,7 +128,7 @@ erver <- function(input, output, session) {
     tagList(
       wellPanel(
         h3(item$soal),
-        radioButtons("user_ans", "Pilihan:",
+        radioButtons("user_ans", "Jawaban:",
                      choices = setNames(c("A", "B", "C", "D"), 
                                         c(item$pilihan_a, item$pilihan_b, item$pilihan_c, item$pilihan_d)),
                      selected = character(0))
@@ -141,43 +137,47 @@ erver <- function(input, output, session) {
     )
   })
 
-  # 5. Lanjut Soal (Simpan State ke Variable)
+  # 5. Next Soal Logic
   observeEvent(input$next_soal, {
     req(input$user_ans)
     item <- vals$current_item
-    
-    # Logika IRT 3PL (Update Theta)
     is_correct <- if(input$user_ans == item$kunci) 1 else 0
-    # ... (Gunakan rumus update theta Anda di sini) ...
-    vals$theta <- vals$theta + (if(is_correct == 1) 0.5 else -0.5) # Contoh simpel
+    
+    # Update Theta IRT 3PL Sederhana
+    exp_val <- exp(item$a * (vals$theta - item$b))
+    p_theta <- item$c + (1 - item$c) * (exp_val / (1 + exp_val))
+    vals$theta <- vals$theta + (item$a * (is_correct - p_theta) * 0.5)
     
     vals$answered <- c(vals$answered, item$id)
     
-    if (length(vals$answered) >= 10) { # Batasi misal 10 soal
+    if (length(vals$answered) >= 10) { # Target 10 soal
       vals$selesai <- TRUE
-      shinyjs::show("btn_kirim")
       shinyjs::hide("exam_area")
+      shinyjs::show("btn_kirim")
     } else {
-      # Cari soal adaptif berikutnya
-      available <- vals$item_bank[!(vals$item_bank$id %in% vals$answered), ]
-      vals$current_item <- available[which.min(abs(available$b - vals$theta)), ]
+      avail <- vals$item_bank[!(vals$item_bank$id %in% vals$answered), ]
+      vals$current_item <- avail[which.min(abs(as.numeric(avail$b) - vals$theta)), ]
     }
   })
 
-  # 6. Kirim Akhir
+  # 6. Kirim Hasil
   observeEvent(input$btn_kirim, {
-    # Kirim data akhir ke Google Sheets
-    body_data <- list(
-      nama = input$user_name,
-      theta = round(vals$theta, 3),
-      status = "Selesai"
-    )
-    POST(URL_GAS, body = toJSON(body_data, auto_unbox = TRUE), encode = "json")
+    # Tentukan Kategori
+    cat_label <- "Cukup"
+    if(vals$theta >= 1.0) cat_label <- "Tinggi"
+    if(vals$theta <= -1.0) cat_label <- "Rendah"
+    
+    # Kirim ke Sheets
+    body <- list(nama = input$user_name, theta = round(vals$theta, 3), kategori = cat_label)
+    POST(URL_GAS, body = toJSON(body, auto_unbox = TRUE), encode = "json")
+    
+    output$final_score <- renderText({ paste("Skor Akhir:", round(vals$theta, 3)) })
+    output$final_cat <- renderUI({ h4(paste("Kategori:", cat_label), style="color:green;") })
     
     shinyjs::hide("btn_kirim")
     shinyjs::show("result_area")
-    output$final_score <- renderText({ paste("Skor Kemampuan Anda:", round(vals$theta, 3)) })
   })
 }
 
+# --- JALANKAN APLIKASI ---
 shinyApp(ui = ui, server = server)
