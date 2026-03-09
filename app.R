@@ -52,18 +52,17 @@ ui <- fluidPage(
   )
 )
 
-server <- function(input, output, session) {
-  
+erver <- function(input, output, session) {
   vals <- reactiveValues(
     theta = 0,
     answered = c(),
     current_item = NULL,
     selesai = FALSE,
-    time_left = 3600,
+    # Pastikan inisialisasi awal adalah 60 menit (3600 detik)
+    time_left = 3600, 
     ujian_mulai = FALSE,
     item_bank = NULL
   )
-
   # --- AMBIL DATA SOAL DENGAN PROTEKSI ---
   observe({
     req(URL_GAS)
@@ -105,21 +104,24 @@ server <- function(input, output, session) {
     vals$current_item <- vals$item_bank[idx_awal, ]
   })
 
-  # 3. Logika Timer
+  # --- LOGIKA TIMER YANG DIPERBAIKI ---
   observe({
     invalidateLater(1000, session)
+    # Timer HANYA berjalan jika ujian sudah dimulai dan belum selesai
     if (vals$ujian_mulai && !vals$selesai) {
       vals$time_left <- vals$time_left - 1
       
-      # Update Tampilan Timer
+      # Update Tampilan ke UI
       mins <- floor(vals$time_left / 60)
       secs <- vals$time_left %% 60
       runjs(sprintf("$('#timer_display').html('%02d:%02d');", mins, secs))
       
+      # Cek jika benar-benar habis
       if (vals$time_left <= 0) {
         vals$selesai <- TRUE
         showModal(modalDialog(title = "Waktu Habis!", "Sistem akan mengirimkan jawaban Anda secara otomatis."))
-        click("btn_kirim")
+        # Pastikan data terkirim sebelum area ujian ditutup
+        click("btn_kirim") 
       }
     }
   })
