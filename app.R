@@ -81,25 +81,30 @@ server <- function(input, output, session) {
   # 2. Fungsi Load Bank Soal dari GAS (Gunakan tab 'bank_soal')
   observe({
     req(URL_GAS)
-    res <- GET(URL_GAS)
-    if (status_code(res) == 200) {
-      vals$item_bank <- fromJSON(content(res, "text"))
-      # Set soal pertama
-      if (is.null(vals$current_item)) {
-        vals$current_item <- vals$item_bank[which.min(abs(vals$item_bank$b - 0)), ]
-      }
-    }
-    # Gunakan tryCatch agar jika gagal ambil data, aplikasi tidak langsung mati
+    # Bungkus seluruh proses pengambilan data di dalam tryCatch
     tryCatch({
-      res <- GET(URL_GAS)
+      res <- GET(URL_GAS, timeout(10)) # Tambahkan timeout 10 detik agar tidak reload selamanya
+      
       if (status_code(res) == 200) {
-        vals$item_bank <- fromJSON(content(res, "text"))
-        if (is.null(vals$current_item) && nrow(vals$item_bank) > 0) {
-          vals$current_item <- vals$item_bank[1, ]
+        # Parsing data JSON
+        data_soal <- fromJSON(content(res, "text", encoding = "UTF-8"))
+        
+        # Simpan ke reactive value
+        vals$item_bank <- data_soal
+        
+        # Set soal pertama jika bank soal tidak kosong
+        if (is.null(vals$current_item) && nrow(data_soal) > 0) {
+          # Memilih soal dengan tingkat kesulitan (b) paling mendekati 0
+          vals$current_item <- data_soal[which.min(abs(as.numeric(data_soal$b) - 0)), ]
         }
+      } else {
+        showNotification("Server Google Sheets tidak merespon (Error 200).", type = "warning")
       }
+      
     }, error = function(e) {
-      showNotification("Gagal mengambil data soal. Periksa koneksi/URL GAS Anda.", type = "error")
+      # Tampilkan notifikasi jika terjadi error koneksi atau JSON rusak
+      showNotification(paste("Error Koneksi:", e$message), type = "error", duration = NULL)
+      print(e) # Muncul di log shinyapps.io
     })
   })
   # 3. Fungsi Kategori Kemampuan
