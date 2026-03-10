@@ -6,7 +6,7 @@ library(shinyjs)
 
 # --- KONFIGURASI ---
 # Ganti dengan URL GAS /exec terbaru Anda
-URL_GAS <- "https://script.google.com/macros/s/AKfycby3mlqFtlr4O_ezpamFg6Roz4YDVMWDjOLAV3VrvJ_SK-g8mP0j7TxY6tSV_mH2Dh1-/exec"
+URL_GAS <- "https://script.google.com/macros/s/AKfycbxliAXzzY_vzZ4TRFRSYOZEd8gpeE1q2lbJD2soxBuhZz5y_d5lRWHxw-zT5Ue9xUfU/exec"
 
 # --- UI ---
 ui <- fluidPage(
