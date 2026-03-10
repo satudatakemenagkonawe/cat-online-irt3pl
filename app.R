@@ -6,7 +6,7 @@ library(shinyjs)
 
 # --- KONFIGURASI ---
 # Ganti dengan URL GAS /exec terbaru Anda
-URL_GAS <- "https://script.google.com/macros/s/AKfycbxoRdb7_cyqhD4GMSEFh0nDjJVqT3_ZTLKoaH-ZU2-n55q7iWYU5ooQSYIT32KSb1Ml/exec"
+URL_GAS <- "https://script.google.com/macros/s/AKfycbx-w1rcACttgfvm3fcDPRIsrsI8qOdNzFKnK0ks0H1t77nL8I1WrtxWRnNBXzuGywAK/exec"
 
 # --- UI ---
 ui <- fluidPage(
@@ -70,6 +70,7 @@ server <- function(input, output, session) {
     req(URL_GAS)
     tryCatch({
       res <- GET(URL_GAS, timeout(15))
+      showNotification(raw)
       if (status_code(res) == 200) {
         raw <- content(res, "text", encoding = "UTF-8")
         raw <- trimws(raw)
@@ -108,11 +109,12 @@ server <- function(input, output, session) {
   })
 
   # 3. Timer Logic
-  observe({
+  observeEvent(vals$ujian_mulai, {
+    while(vals$ujian_mulai && !vals$selesai){
     invalidateLater(1000, session)
-    if (vals$ujian_mulai && !vals$selesai) {
-      vals$time_left <- vals$time_left - 1
-      
+    vals$time_left <- vals$time_left - 1
+    }
+  })      
       mins <- floor(vals$time_left / 60)
       secs <- vals$time_left %% 60
       runjs(sprintf("$('#timer_display').html('%02d:%02d');", mins, secs))
