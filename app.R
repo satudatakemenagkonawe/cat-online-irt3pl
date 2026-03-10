@@ -4,7 +4,7 @@ library(jsonlite)
 library(bslib)
 library(shinyjs)
 
-URL_GAS <- "https://script.google.com/macros/s/AKfycbw0qLBW2wn2lwfix3IMCUIwRMNjUsnFRqwHP-popLe3x8wJUO3WE2oy75uHAauJk58m/exec"
+URL_GAS <- "https://script.google.com/macros/s/AKfycbwvQPgdYR3RHHNIwL9lRAJb0n_Ji9V_IGwfaMCz2JuSo8S2WHB-YM50CXq7nfgzKzMA/exec"
 
 ui <- fluidPage(
   useShinyjs(),
@@ -12,9 +12,13 @@ ui <- fluidPage(
   
   tags$head(
     tags$script(HTML("
-      window.onbeforeunload = function() {
-        return 'Tes sedang berlangsung, jangan refresh halaman!';
-      };
+      observe({
+        runjs("
+          window.onbeforeunload = function() {
+            return 'Tes sedang berlangsung, jangan refresh halaman!';
+          };
+        ")
+      })
     "))
   ),
   
