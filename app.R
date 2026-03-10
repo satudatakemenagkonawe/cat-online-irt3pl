@@ -1,3 +1,4 @@
+Ini sintaks keseluruhan, bantu diperiksa kalau ada yang salah: 
 library(shiny)
 library(httr)
 library(jsonlite)
@@ -56,14 +57,16 @@ vals <- reactiveValues(
     req(URL_GAS)
     tryCatch({
       res <- GET(URL_GAS, timeout(15))
-      showNotification(raw)
-      if (status_code(res) == 200) {
-        raw <- content(res, "text", encoding = "UTF-8")
-        raw <- trimws(raw)
-      if (startsWith(raw, "[") || startsWith(raw, "{")) {
-        vals$item_bank <- fromJSON(raw)
-        }
-      }
+             if (status_code(res) == 200) {
+            	    raw <- content(res, "text", encoding = "UTF-8")
+                  raw <- trimws(raw)
+                  showNotification(raw)
+
+                      if (startsWith(raw, "[") || startsWith(raw, "{")) {
+                          vals$item_bank <- fromJSON(raw)
+                      }
+
+                  }
     }, error = function(e) {
       showNotification("Koneksi ke bank soal bermasalah.", type = "error")
     })
@@ -87,15 +90,7 @@ vals <- reactiveValues(
       which.min(abs(vals$item_bank$b - 0)) 
     ]
   })
-  observeEvent(vals$ujian_mulai, {
-    while(vals$ujian_mulai && !vals$selesai){
-    invalidateLater(1000, session)
-    vals$time_left <- vals$time_left - 1
-    }
-  })      
-      mins <- floor(vals$time_left / 60)
-      secs <- vals$time_left %% 60
-      runjs(sprintf("$('#timer_display').html('%02d:%02d');", mins, secs))
+  runjs
       if (vals$time_left <= 0) {
         vals$selesai <- TRUE
         shinyjs::show("btn_kirim")
@@ -133,31 +128,43 @@ vals <- reactiveValues(
     shinyjs::show("btn_kirim")
   } else {
     avail <- vals$item_bank[!(vals$item_bank$id %in% vals$answered), ]
-    vals$current_item <- avail[
-      which.min(abs(as.numeric(avail$b) - vals$theta))
-    ]
+
+        if(nrow(avail) == 0){
+        vals$selesai <- TRUE
+        shinyjs::show("btn_kirim")
+        return()
+     }
   }
 })
 observeEvent(input$btn_kirim, {
+
   cat_label <- "Cukup"
+
   if(vals$theta >= 1.0) cat_label <- "Tinggi"
   if(vals$theta <= -1.0) cat_label <- "Rendah"
+
   body <- list(
     nama = input$user_name,
     theta = round(vals$theta,3),
     kategori = cat_label
   )
+
   POST(URL_GAS,
        body = toJSON(body, auto_unbox = TRUE),
        encode = "json")
+
   output$final_score <- renderText({
     paste("Skor Akhir:", round(vals$theta,3))
   })
+
   output$final_cat <- renderUI({
     h4(paste("Kategori:", cat_label), style="color:green;")
   })
+
   shinyjs::hide("btn_kirim")
   shinyjs::show("result_area")
+
 })
 
+} 
 shinyApp(ui = ui, server = server)
