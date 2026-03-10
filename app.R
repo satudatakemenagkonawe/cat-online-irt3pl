@@ -10,17 +10,15 @@ ui <- fluidPage(
   useShinyjs(),
   theme = bslib::bs_theme(bootswatch = "flatly"),
   
-  tags$head(
-    tags$script(HTML("
-      observe({
-        runjs("
-          window.onbeforeunload = function() {
-            return 'Tes sedang berlangsung, jangan refresh halaman!';
-          };
-        ")
-      })
-    "))
-  ),
+  # Gunakan includeScript atau letakkan script di file terpisah
+    tags$head(
+        tags$script(src = "https://cdn.jsdelivr.net/npm/sweetalert2@11"), # Contoh library resmi
+        tags$script(HTML("
+          $(document).on('shiny:connected', function(event) {
+            console.log('Connected to Shiny server safely');
+          });
+        "))
+    )
   
   titlePanel("CAT Online - Adaptive Test"),
   
