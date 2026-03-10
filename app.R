@@ -4,241 +4,244 @@ library(jsonlite)
 library(bslib)
 library(shinyjs)
 
-URL_GAS <- "https://script.google.com/macros/s/AKfycbwvQPgdYR3RHHNIwL9lRAJb0n_Ji9V_IGwfaMCz2JuSo8S2WHB-YM50CXq7nfgzKzMA/exec"
+# --- KONFIGURASI ---
+# Ganti dengan URL Google Apps Script (GAS) Anda yang terbaru
+URL_GAS <- "https://script.google.com/macros/s/AKfycbz1QDXTJXoEZ92ds162ySujUFI3jea3DOBs16pL9230cYvMHJo2xsZxrZjVE63Dqk0/exec"
 
+# --- UI ---
 ui <- fluidPage(
   useShinyjs(),
   theme = bslib::bs_theme(bootswatch = "flatly"),
   
-  # Gunakan includeScript atau letakkan script di file terpisah
-    tags$head(
-        tags$script(src = "https://cdn.jsdelivr.net/npm/sweetalert2@11"), # Contoh library resmi
-        tags$script(HTML("
-          $(document).on('shiny:connected', function(event) {
-            console.log('Connected to Shiny server safely');
-          });
-        "))
-    )
-  
-  titlePanel("CAT Online - Adaptive Test"),
+  tags$head(
+    tags$style(HTML("
+      .certificate-box { border: 5px double #2c3e50; padding: 30px; text-align: center; background-color: #f8f9fa; border-radius: 15px; margin-top: 20px; }
+      .score-circle { font-size: 64px; font-weight: bold; color: #2ecc71; margin: 10px 0; }
+      .progress { height: 25px; font-size: 14px; font-weight: bold; }
+    "))
+  ),
+
+  titlePanel("CAT Online - Adaptive Test IRT 3PL"),
   
   sidebarLayout(
     sidebarPanel(
       id = "side-panel",
-      h4("Status Peserta"),
+      h4("Informasi Peserta"),
       textInput("user_name", "Nama Lengkap:", ""),
-      actionButton("btn_mulai", "Mulai Ujian", class = "btn-primary w-100"),
       hr(),
-      wellPanel(
-        h5("Sisa Waktu:"),
-        div(id="timer_display",
-            style="font-size:30px;font-weight:bold;color:red;",
-            "60:00")
-      )
+      uiOutput("progress_bar_ui"),
+      hr(),
+      helpText("Tes ini bersifat adaptif. Soal akan menyesuaikan dengan tingkat kemampuan Anda.")
     ),
     
     mainPanel(
-      hidden(div(id="exam_area", uiOutput("soal_ui"))),
+      # Area Ujian
+      div(id = "quiz-container", 
+          uiOutput("soal_ui")
+      ),
       
-      hidden(div(id="result_area",
-                 div(style="text-align:center;padding:50px;border:2px solid #ddd;border-radius:15px;",
-                     h2("TES SELESAI"),
-                     hr(),
-                     h3(textOutput("final_score")),
-                     h4(uiOutput("final_cat")),
-                     p("Data telah tersimpan secara otomatis.")
-                 )
-      )),
-      
-      hidden(actionButton("btn_kirim",
-                          "Lihat Hasil Akhir",
-                          class="btn-success btn-lg w-100"))
+      # Area Dashboard Hasil (Awalnya Tersembunyi)
+      hidden(
+        div(id = "result-dashboard",
+            div(class = "certificate-box",
+                h2("HASIL EVALUASI KOMPETENSI"),
+                hr(),
+                h4("Nama Peserta:"),
+                h3(textOutput("res_name", inline = TRUE)),
+                br(),
+                p("Skor Kemampuan (Theta):"),
+                div(class = "score-circle", textOutput("res_theta", inline = TRUE)),
+                h4(uiOutput("res_cat_ui")),
+                p(em("Data ini telah disinkronkan ke pusat data penilaian.")),
+                hr(),
+                actionButton("btn_ulang", "Ulangi Tes", class = "btn-outline-secondary")
+            )
+        )
+      ),
+      br(),
+      # Tombol Kirim muncul hanya jika selesai
+      hidden(actionButton("btn_kirim", class = "btn-success btn-lg w-100"))
     )
   )
 )
 
-server <- function(input, output, session){
-
+# --- SERVER ---
+server <- function(input, output, session) {
+  
+  # 1. Inisialisasi Data & State
   vals <- reactiveValues(
     theta = 0,
     answered = c(),
     current_item = NULL,
     selesai = FALSE,
-    time_left = 3600,
-    ujian_mulai = FALSE,
-    item_bank = NULL
+    item_bank = NULL,
+    total_target = 10 # Ubah jumlah soal yang ingin dikerjakan di sini
   )
-  
+
+  # 2. Fungsi Load Bank Soal dari GAS (Gunakan tab 'bank_soal')
   observe({
+    req(URL_GAS)
+    # Bungkus seluruh proses pengambilan data di dalam tryCatch
     tryCatch({
+      res <- GET(URL_GAS, timeout(10)) # Tambahkan timeout 10 detik agar tidak reload selamanya
       
-      res <- GET(URL_GAS, timeout(15))
-      
-      if(status_code(res)==200){
+      if (status_code(res) == 200) {
+        # Parsing data JSON
+        data_soal <- fromJSON(content(res, "text", encoding = "UTF-8"))
         
-        raw <- content(res,"text",encoding="UTF-8")
-        raw <- trimws(raw)
+        # Simpan ke reactive value
+        vals$item_bank <- data_soal
         
-        if(startsWith(raw,"[") || startsWith(raw,"{")){
-          vals$item_bank <- fromJSON(raw)
+        # Set soal pertama jika bank soal tidak kosong
+        if (is.null(vals$current_item) && nrow(data_soal) > 0) {
+          # Memilih soal dengan tingkat kesulitan (b) paling mendekati 0
+          vals$current_item <- data_soal[which.min(abs(as.numeric(data_soal$b) - 0)), ]
         }
+      } else {
+        showNotification("Server Google Sheets tidak merespon (Error 200).", type = "warning")
       }
       
-    },error=function(e){
-      showNotification("Koneksi ke bank soal bermasalah", type="error")
+    }, error = function(e) {
+      # Tampilkan notifikasi jika terjadi error koneksi atau JSON rusak
+      showNotification(paste("Error Koneksi:", e$message), type = "error", duration = NULL)
+      print(e) # Muncul di log shinyapps.io
     })
   })
-  
-  observeEvent(input$btn_mulai,{
-    
-    req(input$user_name!="")
-    req(!is.null(vals$item_bank))
-    
-    vals$item_bank$a <- as.numeric(vals$item_bank$a)
-    vals$item_bank$b <- as.numeric(vals$item_bank$b)
-    vals$item_bank$c <- as.numeric(vals$item_bank$c)
-    
-    vals$ujian_mulai <- TRUE
-    
-    shinyjs::hide("btn_mulai")
-    shinyjs::disable("user_name")
-    shinyjs::show("exam_area")
-    
-    vals$current_item <- vals$item_bank[
-      which.min(abs(vals$item_bank$b - vals$theta)),
-    ]
-    
+  # 3. Fungsi Kategori Kemampuan
+  get_category <- function(theta) {
+    if (theta >= 1.5) return(list(label = "SANGAT MAHIR", color = "#1b5e20"))
+    if (theta >= 0.5) return(list(label = "MAHIR", color = "#2ecc71"))
+    if (theta >= -0.5) return(list(label = "CUKUP", color = "#f1c40f"))
+    if (theta >= -1.5) return(list(label = "PERLU BELAJAR", color = "#e67e22"))
+    return(list(label = "BUTUH BIMBINGAN", color = "#e74c3c"))
+  }
+
+  # 4. Render Progress Bar
+  output$progress_bar_ui <- renderUI({
+    done <- length(vals$answered)
+    total <- vals$total_target
+    persen <- round((done / total) * 100)
+    tagList(
+      p(paste0("Progres: ", done, " / ", total, " Soal")),
+      div(class = "progress",
+          div(class = "progress-bar progress-bar-striped progress-bar-animated bg-info", 
+              style = paste0("width: ", persen, "%;"), paste0(persen, "%")))
+    )
   })
-  
-  observe({
-    
-    invalidateLater(1000, session)
-    
-    if(vals$ujian_mulai && !vals$selesai){
-      
-      vals$time_left <- vals$time_left - 1
-      
-      mins <- floor(vals$time_left/60)
-      secs <- vals$time_left %% 60
-      
-      runjs(sprintf(
-        "$('#timer_display').html('%02d:%02d');",
-        mins,secs
-      ))
-      
-      if(vals$time_left<=0){
-        vals$selesai <- TRUE
-        shinyjs::hide("exam_area")
-        shinyjs::show("btn_kirim")
-      }
-    }
-  })
-  
+
+  # 5. Render UI Soal
   output$soal_ui <- renderUI({
-    
-    req(vals$current_item,!vals$selesai)
-    
+    if (vals$selesai) return(h3("Selesai! Silakan klik tombol hijau di bawah.", class="text-success"))
     item <- vals$current_item
+    req(item)
     
     tagList(
       wellPanel(
         h3(item$soal),
-        
-        radioButtons(
-          "user_ans",
-          "Jawaban:",
-          choices=setNames(
-            c("A","B","C","D"),
-            c(item$pilihan_a,
-              item$pilihan_b,
-              item$pilihan_c,
-              item$pilihan_d)
-          ),
-          selected=character(0)
-        )
+        hr(),
+        radioButtons("user_ans", "Pilih Jawaban Anda:",
+                     choices = setNames(c("A", "B", "C", "D"), 
+                                        c(item$pilihan_a, item$pilihan_b, item$pilihan_c, item$pilihan_d)),
+                     selected = character(0))
       ),
-      
-      actionButton("next_soal",
-                   "Simpan & Lanjut",
-                   class="btn-info")
+      actionButton("next_soal", "Simpan & Lanjut", class = "btn-primary btn-md")
     )
   })
-  
-  observeEvent(input$next_soal,{
-    
-    req(input$user_ans)
-    
+
+  # 6. Logika Tombol Lanjut (IRT 3PL)
+  observeEvent(input$next_soal, {
+    req(input$user_ans, input$user_name != "")
     item <- vals$current_item
     
-    is_correct <- if(input$user_ans==item$kunci) 1 else 0
+    # Hitung Benar/Salah
+    is_correct <- if(input$user_ans == item$kunci) 1 else 0
     
-    exp_val <- exp(item$a*(vals$theta-item$b))
+    # Update Theta (Rumus Sederhana Pendekatan IRT 3PL)
+    # Probabilitas Benar P(theta)
+    exp_val <- exp(item$a * (vals$theta - item$b))
+    p_theta <- item$c + (1 - item$c) * (exp_val / (1 + exp_val))
     
-    p_theta <- item$c+(1-item$c)*(exp_val/(1+exp_val))
+    # Update theta berdasarkan error (is_correct - p_theta)
+    vals$theta <- vals$theta + (item$a * (is_correct - p_theta) * 0.5)
     
-    vals$theta <- vals$theta + (item$a*(is_correct-p_theta)*0.5)
+    # Simpan ID yang sudah dijawab
+    vals$answered <- c(vals$answered, item$id)
     
-    vals$answered <- c(vals$answered,item$id)
-    
-    if(length(vals$answered)>=10){
-      
+    # Cek Batas Soal
+    if (length(vals$answered) >= vals$total_target) {
       vals$selesai <- TRUE
-      shinyjs::hide("exam_area")
       shinyjs::show("btn_kirim")
-      
-    }else{
-      
-      avail <- vals$item_bank[!(vals$item_bank$id %in% vals$answered),]
-      
-      if(nrow(avail)==0){
-        vals$selesai <- TRUE
-        shinyjs::show("btn_kirim")
-        return()
-      }
-      
-      vals$current_item <- avail[
-        which.min(abs(avail$b - vals$theta)),
-      ]
-      
+    } else {
+      # Cari soal berikutnya yang 'b' nya paling dekat dengan theta baru
+      available <- vals$item_bank[!(vals$item_bank$id %in% vals$answered), ]
+      vals$current_item <- available[which.min(abs(available$b - vals$theta)), ]
     }
-    
   })
-  
-  observeEvent(input$btn_kirim,{
+
+  # 7. Tombol Kirim & Tampilkan Dashboard
+  observeEvent(input$btn_kirim, {
+    cat_data <- get_category(vals$theta)
     
-    cat_label <- "Cukup"
-    
-    if(vals$theta>=1.0) cat_label <- "Tinggi"
-    if(vals$theta<=-1.0) cat_label <- "Rendah"
-    
-    body <- list(
-      nama=input$user_name,
-      theta=round(vals$theta,3),
-      kategori=cat_label
+    # Kirim ke Google Sheets
+    body_data <- list(
+      nama = input$user_name,
+      theta = round(vals$theta, 3),
+      kategori = cat_data$label,
+      jumlah_soal = length(vals$answered)
     )
+    POST(url = URL_GAS, body = toJSON(body_data, auto_unbox = TRUE), encode = "json")
     
-    tryCatch({
-      POST(
-        URL_GAS,
-        body=toJSON(body,auto_unbox=TRUE),
-        encode="json"
-      )
-    },error=function(e){})
-    
-    output$final_score <- renderText({
-      paste("Skor Akhir:",round(vals$theta,3))
+    # Tampilkan Dashboard
+    output$res_name <- renderText({ input$user_name })
+    output$res_theta <- renderText({ round(vals$theta, 3) })
+    output$res_cat_ui <- renderUI({
+      span(cat_data$label, style = paste0("color: ", cat_data$color, "; font-weight: bold; font-size: 24px;"))
     })
     
-    output$final_cat <- renderUI({
-      h4(paste("Kategori:",cat_label),
-         style="color:green;")
-    })
-    
-    shinyjs::hide("btn_kirim")
-    shinyjs::show("result_area")
-    
+    shinyjs::hide("quiz-container")
+    shinyjs::hide("side-panel")
+    shinyjs::show("result-dashboard")
   })
   
+  observeEvent(input$btn_ulang, { session$reload() })
 }
 
-shinyApp(ui=ui, server=server)
+shinyApp(ui, server)
+
+
+SINTAKS DI GOOGLE APPS SCRIPT
+
+function doGet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("bank_soal");
+  var data = sheet.getDataRange().getValues();
+  var headers = data[0];
+  var jsonArray = [];
+  
+  for (var i = 1; i < data.length; i++) {
+    var obj = {};
+    for (var j = 0; j < headers.length; j++) {
+      obj[headers[j]] = data[i][j];
+    }
+    jsonArray.push(obj);
+  }
+  
+  return ContentService.createTextOutput(JSON.stringify(jsonArray))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("hasil_tes");
+  var data = JSON.parse(e.postData.contents);
+  
+  sheet.appendRow([
+    new Date(), 
+    data.nama, 
+    data.theta, 
+    data.kategori, 
+    data.jumlah_soal
+  ]);
+  
+  return ContentService.createTextOutput("Sukses").setMimeType(ContentService.MimeType.TEXT);
+}
