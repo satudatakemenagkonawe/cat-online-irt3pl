@@ -101,7 +101,7 @@ vals <- reactiveValues(
         shinyjs::show("btn_kirim")
       }
     }
-  })
+  
   output$soal_ui <- renderUI({
     req(vals$current_item, !vals$selesai)
     item <- vals$current_item
@@ -159,5 +159,5 @@ observeEvent(input$btn_kirim, {
   shinyjs::hide("btn_kirim")
   shinyjs::show("result_area")
 })
-}  
+
 shinyApp(ui = ui, server = server)
