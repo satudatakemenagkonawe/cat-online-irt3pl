@@ -4,7 +4,7 @@ library(jsonlite)
 library(bslib)
 library(shinyjs)
 
-URL_GAS <- "https://script.google.com/macros/s/AKfycbx-w1rcACttgfvm3fcDPRIsrsI8qOdNzFKnK0ks0H1t77nL8I1WrtxWRnNBXzuGywAK/exec"
+URL_GAS <- "https://script.google.com/macros/s/AKfycbw0qLBW2wn2lwfix3IMCUIwRMNjUsnFRqwHP-popLe3x8wJUO3WE2oy75uHAauJk58m/exec"
 
 ui <- fluidPage(
   useShinyjs(),
